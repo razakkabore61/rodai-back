@@ -11,27 +11,46 @@ const db = admin.firestore()
  * @documentation https://firebase.google.com/docs/auth/admin/manage-users?hl=fr&authuser=0#update_a_user
  */
 exports.getUsersDocByUid = functions.https.onRequest((req, res) => {
-    const uids = req.body.uids;
-    if (!uids || !Array.isArray(uids)) {
-        return res.status(500).send("uid list are required");
-    }
-    return cors(req, res, async () => {
+    cors(req, res, async () => {
         try {
-            const documents = []
-            for (const uid in uids) {
-                const docRef = db.collection("users").doc(uid);
-                const docSnap = docRef.get();
-                if (docSnap.exists) {
-                    documents.push({ id: (await docSnap).id, ...(await docSnap).data() });
-                }
+            const uids = req.query.uids; // Pour POST -> req.body.uids, pour GET -> req.query.uids
+            const limit = parseInt(req.query.limit, 10); // Limite par défaut: le nombre total de UIDs
+            const startAfter = req.query.startAfter; // ID du document à partir duquel commencer
+
+            if (!uids || !Array.isArray(uids)) {
+                return res.status(400).send("UID list is required and should be an array.");
             }
-            res.send(documents)
-            // const userRecord = await getFirestore()
-            // .collection("users").where
-            // .get();
-            // res.send(userRecord.toJSON());
+            const startAfterIndex = uids.indexOf(startAfter)
+            const limitedUids = () => {
+                if (limit) {
+                    if (startAfterIndex) {
+                        return uids.slice(startAfterIndex + 1, startAfterIndex + 1 + limit)
+                    }
+                    return uids.slice(0, limit + 1)
+                };
+                return uids
+            }
+
+            // Récupérer les documents en parallèle
+            const documentPromises = limitedUids().map(async (uid) => {
+                const docRef = db.collection("users").doc(uid);
+                const docSnap = await docRef.get();
+                if (docSnap.exists) {
+                    return { id: docSnap.id, ...docSnap.data() };
+                } else {
+                    return null; // Document non trouvé
+                }
+            });
+
+            const documents = await Promise.all(documentPromises);
+
+            // Filtrer les documents null (ceux qui n'ont pas été trouvés)
+            const filteredDocuments = documents.filter(doc => doc !== null);
+
+            return res.status(200).json(filteredDocuments);
         } catch (error) {
-            res.status(500).send(error);
+            console.error("Error retrieving documents:", error);
+            return res.status(500).send("Internal Server Error");
         }
     });
 })
