@@ -17,11 +17,16 @@ exports.getUsersDocByUid = functions.https.onRequest((req, res) => {
             const limit = parseInt(req.query.limit, 10); // Limite par défaut: le nombre total de UIDs
             const startAfter = req.query.startAfter; // ID du document à partir duquel commencer
 
-            if (!uids || !Array.isArray(uids)) {
+            if (!uids) {
                 return res.status(400).send("UID list is required and should be an array.");
             }
-            const startAfterIndex = uids.indexOf(startAfter)
+
+            const startAfterIndex = Array.isArray(uids) ? uids.indexOf(startAfter) : 0
             const limitedUids = () => {
+                if (!Array.isArray(uids)) {
+                    return [uids]
+                }
+
                 if (limit) {
                     if (startAfterIndex) {
                         return uids.slice(startAfterIndex + 1, startAfterIndex + 1 + limit)
