@@ -13,30 +13,31 @@ const db = admin.firestore()
 exports.receiveChatsMessages = functions.https.onRequest((req, res) => {
     cors(req, res, async () => {
         try {
-            const uids = req.body.uids; // Pour POST -> req.body.uids, pour GET -> req.query.uids
+            const uid = req.body.uid; // Pour POST -> req.body.uids, pour GET -> req.query.uids
+            const chatsId = req.body.chatsId;
 
-            if (!uids) {
+            if (!uid || !chatsId) {
                 return res.status(400).send("UID list is required and should be an array.");
             }
             const idList = () => {
-                if (!Array.isArray(uids)) {
-                    return [uids]
+                if (!Array.isArray(chatsId)) {
+                    return [chatsId]
                 }
-                return uids
+                return chatsId
             }
 
             const batch = db.batch()
 
-            await Promise.all(idList().map(async (uid) => {
+            await Promise.all(idList().map(async (id) => {
                 const updatechat = {
                     "lastMessage.received": true
                 };
 
-                const docRef = db.collection("chats").doc(uid);
+                const docRef = db.collection("chats").doc(id);
                 batch.update(docRef, updatechat);
 
                 const msgCollectionRef = docRef.collection("messages"); // Correctement accéder à la collection
-                const snapshot = await msgCollectionRef.where("received", "!=", true).get();
+                const snapshot = await msgCollectionRef.where("received", "!=", true).where("rUid","==",uid).get();
                 snapshot.forEach((doc) => {
                     if (doc.exists) {
                         const msg = doc.data();
